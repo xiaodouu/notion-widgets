@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Countdown Widget</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #ffffff;
+    --bg2:       #f7f6f3;
+    --text:      #37352f;
+    --text-dim:  #9b9a97;
+    --accent:    #2eaadc;
+    --accent2:   #0b6e99;
+    --bar-bg:    #e9e9e7;
+    --radius:    10px;
+    --font:      -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono:      "SF Mono", "Fira Mono", "Cascadia Code", "Consolas", monospace;
+  }
+
+  body.dark {
+    --bg:       #191919;
+    --bg2:      #252525;
+    --text:     #e6e6e4;
+    --text-dim: #6b6b69;
+    --bar-bg:   #333333;
+  }
+
+  body.color-blue   { --accent: #2eaadc; --accent2: #0b6e99; }
+  body.color-purple { --accent: #9b59b6; --accent2: #6c3483; }
+  body.color-green  { --accent: #27ae60; --accent2: #1e8449; }
+  body.color-orange { --accent: #f39c12; --accent2: #d68910; }
+  body.color-pink   { --accent: #e91e8c; --accent2: #a01060; }
+  body.color-red    { --accent: #e74c3c; --accent2: #c0392b; }
+  body.color-teal   { --accent: #1abc9c; --accent2: #148f77; }
+  body.color-yellow { --accent: #f1c40f; --accent2: #d4ac0d; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+    transition: background .3s, color .3s;
+  }
+
+  .widget-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    text-align: center;
+  }
+
+  .done-msg {
+    font-size: clamp(2rem, 10vw, 4rem);
+    text-align: center;
+  }
+
+  /* ── Cards Style ─────────────────────────────────── */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    width: 100%;
+    max-width: 480px;
+  }
+
+  .card {
+    background: var(--bg2);
+    border-radius: var(--radius);
+    border-top: 3px solid var(--accent);
+    padding: 12px 6px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    transition: background .3s;
+  }
+
+  .card-num {
+    font-family: var(--mono);
+    font-size: clamp(1.6rem, 6vw, 2.6rem);
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .card-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* ── Linear Style ────────────────────────────────── */
+  .linear-wrap {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .linear-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .linear-pct {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .linear-time-left {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .track {
+    width: 100%;
+    height: 8px;
+    background: var(--bar-bg);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width .8s cubic-bezier(.4,0,.2,1);
+    position: relative;
+  }
+
+  .fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.25) 50%, transparent 100%);
+    animation: shimmer 2.4s ease-in-out infinite;
+    border-radius: inherit;
+  }
+
+  @keyframes shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+  }
+
+  .linear-sub {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2px;
+  }
+
+  .linear-units {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .linear-unit {
+    text-align: center;
+  }
+
+  .linear-unit-num {
+    font-family: var(--mono);
+    font-size: clamp(1rem, 4vw, 1.5rem);
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .linear-unit-lbl {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+  }
+
+  /* ── Circle Style ────────────────────────────────── */
+  .circles-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    width: 100%;
+    max-width: 460px;
+  }
+
+  .circle-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .circle-svg-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .circle-svg {
+    transform: rotate(-90deg);
+  }
+
+  .circle-track {
+    fill: none;
+    stroke: var(--bar-bg);
+  }
+
+  .circle-fill {
+    fill: none;
+    stroke: var(--accent);
+    stroke-linecap: round;
+    transition: stroke-dashoffset .8s cubic-bezier(.4,0,.2,1);
+  }
+
+  .circle-inner {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .circle-lbl {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+<div class="widget-label" id="top-label"></div>
+<div id="root"></div>
+
+<script>
+const P = new URLSearchParams(location.search);
+
+const cfg = {
+  to:    P.get('to') || null,
+  label: P.get('label') ? decodeURIComponent(P.get('label')) : '',
+  style: P.get('style') || 'cards',
+  dark:  P.get('dark') === 'true' || matchMedia('(prefers-color-scheme:dark)').matches,
+  lang:  P.get('lang') || 'en',
+  color: P.get('color') || 'blue',
+  done:  P.get('done') ? decodeURIComponent(P.get('done')) : '🎉',
+};
+
+if (cfg.dark) document.body.classList.add('dark');
+document.body.classList.add('color-' + cfg.color);
+
+// Default target: next Jan 1
+function getTarget() {
+  if (cfg.to) return new Date(cfg.to);
+  const now = new Date();
+  return new Date(now.getFullYear() + 1, 0, 1);
+}
+
+const TARGET = getTarget();
+
+const UNIT_LABELS = {
+  zh: ['天', '时', '分', '秒'],
+  en: ['Days', 'Hours', 'Mins', 'Secs'],
+};
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+function getRemainingParts() {
+  const diff = Math.max(0, TARGET - Date.now());
+  const total_s = Math.floor(diff / 1000);
+  const d = Math.floor(total_s / 86400);
+  const h = Math.floor((total_s % 86400) / 3600);
+  const m = Math.floor((total_s % 3600) / 60);
+  const s = total_s % 60;
+  return { d, h, m, s, diff };
+}
+
+function getTotalDuration() {
+  const now = new Date();
+  // Use page load time as start, or simply use Jan 1 of target year
+  const start = new Date(TARGET.getFullYear(), 0, 1);
+  return Math.max(1, TARGET - start);
+}
+
+if (cfg.label) {
+  document.getElementById('top-label').textContent = cfg.label;
+}
+
+// ── Cards ─────────────────────────────────────────────────────────
+function renderCards() {
+  const root = document.getElementById('root');
+  const ul = UNIT_LABELS[cfg.lang] || UNIT_LABELS.en;
+  root.innerHTML = `<div class="cards-grid">
+    ${['d','h','m','s'].map((k, i) => `
+      <div class="card">
+        <div class="card-num" id="c-${k}">00</div>
+        <div class="card-label">${ul[i]}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function tickCards() {
+  const { d, h, m, s, diff } = getRemainingParts();
+  if (diff <= 0) {
+    document.getElementById('root').innerHTML = `<div class="done-msg">${cfg.done}</div>`;
+    return;
+  }
+  document.getElementById('c-d').textContent = String(d).padStart(2, '0');
+  document.getElementById('c-h').textContent = pad(h);
+  document.getElementById('c-m').textContent = pad(m);
+  document.getElementById('c-s').textContent = pad(s);
+}
+
+// ── Linear ────────────────────────────────────────────────────────
+function renderLinear() {
+  const root = document.getElementById('root');
+  const ul = UNIT_LABELS[cfg.lang] || UNIT_LABELS.en;
+  root.innerHTML = `<div class="linear-wrap">
+    <div class="linear-header">
+      <span class="linear-time-left" id="l-left"></span>
+      <span class="linear-pct" id="l-pct"></span>
+    </div>
+    <div class="track"><div class="fill" id="l-fill" style="width:0%"></div></div>
+    <div class="linear-units">
+      ${['d','h','m','s'].map((k, i) => `
+        <div class="linear-unit">
+          <div class="linear-unit-num" id="l-${k}">00</div>
+          <div class="linear-unit-lbl">${ul[i]}</div>
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function tickLinear() {
+  const { d, h, m, s, diff } = getRemainingParts();
+  if (diff <= 0) {
+    document.getElementById('root').innerHTML = `<div class="done-msg">${cfg.done}</div>`;
+    return;
+  }
+  const total = getTotalDuration();
+  const elapsed = total - diff;
+  const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
+  document.getElementById('l-fill').style.width = pct.toFixed(2) + '%';
+  document.getElementById('l-pct').textContent = pct.toFixed(1) + '%';
+  const lang = cfg.lang;
+  document.getElementById('l-left').textContent =
+    lang === 'zh' ? `还剩 ${d}天 ${pad(h)}时 ${pad(m)}分 ${pad(s)}秒`
+                  : `${d}d ${pad(h)}h ${pad(m)}m ${pad(s)}s left`;
+  document.getElementById('l-d').textContent = String(d).padStart(2, '0');
+  document.getElementById('l-h').textContent = pad(h);
+  document.getElementById('l-m').textContent = pad(m);
+  document.getElementById('l-s').textContent = pad(s);
+}
+
+// ── Circle ────────────────────────────────────────────────────────
+const CIRCLE_SZ = 80;
+const CIRCLE_R  = 32;
+const CIRCLE_C  = 2 * Math.PI * CIRCLE_R;
+const CIRCLE_SW = 5;
+
+function circleOffset(progress) {
+  return CIRCLE_C * (1 - Math.min(1, Math.max(0, progress)));
+}
+
+function renderCircles() {
+  const root = document.getElementById('root');
+  const ul = UNIT_LABELS[cfg.lang] || UNIT_LABELS.en;
+  // Max values for progress arcs: days relative to total, h/m/s mod
+  const MAX = [null, 24, 60, 60]; // days uses total duration
+  const keys = ['d','h','m','s'];
+  root.innerHTML = `<div class="circles-grid">
+    ${keys.map((k, i) => `
+      <div class="circle-item">
+        <div class="circle-svg-wrap" style="width:${CIRCLE_SZ}px;height:${CIRCLE_SZ}px">
+          <svg class="circle-svg" width="${CIRCLE_SZ}" height="${CIRCLE_SZ}" viewBox="0 0 ${CIRCLE_SZ} ${CIRCLE_SZ}">
+            <circle class="circle-track" cx="${CIRCLE_SZ/2}" cy="${CIRCLE_SZ/2}" r="${CIRCLE_R}" stroke-width="${CIRCLE_SW}"/>
+            <circle class="circle-fill" id="cr-${k}" cx="${CIRCLE_SZ/2}" cy="${CIRCLE_SZ/2}" r="${CIRCLE_R}"
+              stroke-width="${CIRCLE_SW}" stroke-dasharray="${CIRCLE_C}" stroke-dashoffset="${CIRCLE_C}"/>
+          </svg>
+          <div class="circle-inner" style="font-size:${i===0?'1.05rem':'1.1rem'}">
+            <span id="ci-${k}">00</span>
+          </div>
+        </div>
+        <div class="circle-lbl">${ul[i]}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function tickCircles() {
+  const { d, h, m, s, diff } = getRemainingParts();
+  if (diff <= 0) {
+    document.getElementById('root').innerHTML = `<div class="done-msg">${cfg.done}</div>`;
+    return;
+  }
+  const totalDays = Math.ceil(getTotalDuration() / 86400000);
+  const progresses = [d / totalDays, h / 24, m / 60, s / 60];
+  const vals = [String(d).padStart(2,'0'), pad(h), pad(m), pad(s)];
+  ['d','h','m','s'].forEach((k, i) => {
+    document.getElementById('ci-' + k).textContent = vals[i];
+    document.getElementById('cr-' + k).style.strokeDashoffset = circleOffset(progresses[i]);
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+let tick;
+if (cfg.style === 'linear') {
+  renderLinear();
+  tick = tickLinear;
+} else if (cfg.style === 'circle') {
+  renderCircles();
+  tick = tickCircles;
+} else {
+  renderCards();
+  tick = tickCards;
+}
+
+tick();
+setInterval(tick, 1000);
+
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'notion-color-scheme') {
+    document.body.classList.toggle('dark', e.data.value === 'dark');
+  }
+});
+</script>
+</body>
+</html>

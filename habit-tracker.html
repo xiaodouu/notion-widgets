@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Habit Tracker</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:#ffffff; --bg2:#f7f6f3; --text:#37352f; --text-dim:#9b9a97;
+    --accent:#2eaadc; --accent2:#0b6e99; --bar-bg:#e9e9e7;
+    --radius:10px; --font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --c1:#2eaadc; --c2:#0b6e99;
+  }
+  body.dark { --bg:#191919; --bg2:#252525; --text:#e6e6e4; --text-dim:#6b6b69; --bar-bg:#333333; }
+
+  body.preset-blue   { --c1:#2eaadc; --c2:#0b6e99; }
+  body.preset-purple { --c1:#9b59b6; --c2:#6c3483; }
+  body.preset-green  { --c1:#27ae60; --c2:#1e8449; }
+  body.preset-orange { --c1:#f39c12; --c2:#d68910; }
+  body.preset-pink   { --c1:#e91e8c; --c2:#a01060; }
+  body.preset-red    { --c1:#e74c3c; --c2:#c0392b; }
+  body.preset-teal   { --c1:#1abc9c; --c2:#148f77; }
+  body.preset-yellow { --c1:#f1c40f; --c2:#d4ac0d; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+    min-height: 100vh;
+  }
+
+  .week-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    gap: 8px;
+  }
+
+  .week-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    flex: 1;
+  }
+
+  .grid-header {
+    display: grid;
+    grid-template-columns: 100px repeat(7, 32px);
+    gap: 4px;
+    margin-bottom: 4px;
+    padding-left: 0;
+  }
+
+  .day-label {
+    width: 32px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .habit-row {
+    display: grid;
+    grid-template-columns: 100px repeat(7, 32px);
+    gap: 4px;
+    margin-bottom: 2px;
+  }
+
+  .habit-name {
+    font-size: 0.8rem;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    padding-right: 8px;
+  }
+
+  .habit-cell {
+    width: 32px;
+    height: 32px;
+    border-radius: 7px;
+    background: var(--bar-bg);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: transparent;
+    transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+    user-select: none;
+    -webkit-user-select: none;
+    border: none;
+    outline: none;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .habit-cell:hover {
+    opacity: 0.85;
+    transform: scale(1.05);
+  }
+
+  .habit-cell.checked {
+    background: linear-gradient(135deg, var(--c1), var(--c2));
+    color: #fff;
+    animation: checkPop 0.2s ease forwards;
+  }
+
+  @keyframes checkPop {
+    0%   { transform: scale(0.8); opacity: 0.6; }
+    60%  { transform: scale(1.08); }
+    100% { transform: scale(1.0); opacity: 1; }
+  }
+
+  .habit-summary {
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    text-align: right;
+    padding-right: 0;
+    margin-bottom: 8px;
+    grid-column: 2 / span 7;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .summary-bar {
+    height: 3px;
+    background: var(--bar-bg);
+    border-radius: 2px;
+    width: 64px;
+    overflow: hidden;
+  }
+
+  .summary-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--c1), var(--c2));
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+
+  .habit-block {
+    margin-bottom: 4px;
+  }
+
+  .habit-summary-row {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 4px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .summary-text {
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+</style>
+</head>
+<body>
+<div class="week-header">
+  <span class="week-label" id="weekLabel"></span>
+</div>
+<div class="grid-header" id="gridHeader">
+  <div></div>
+</div>
+<div id="habitGrid"></div>
+
+<script>
+(function() {
+  const params = new URLSearchParams(location.search);
+
+  // Dark mode
+  if (params.get('dark') === 'true') document.body.classList.add('dark');
+
+  // Color preset
+  const color = params.get('color') || 'blue';
+  document.body.classList.add('preset-' + color);
+
+  // Language
+  const lang = params.get('lang') || 'en';
+  const dayLabelsZh = ['一','二','三','四','五','六','日'];
+  const dayLabelsEn = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const dayLabels = lang === 'zh' ? dayLabelsZh : dayLabelsEn;
+
+  // Habits
+  const habitsParam = params.get('habits') || (lang === 'zh' ? '运动;读书;冥想;早起' : 'Exercise;Read;Meditate;Wake Early');
+  const habits = habitsParam.split(';').map(h => h.trim()).filter(Boolean);
+
+  // Week start date (Monday)
+  function getThisMonday() {
+    const d = new Date();
+    const day = d.getDay(); // 0=Sun
+    const diff = (day === 0) ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    d.setHours(0,0,0,0);
+    return d;
+  }
+
+  function parseDate(str) {
+    const parts = str.split('-');
+    return new Date(+parts[0], +parts[1]-1, +parts[2]);
+  }
+
+  const weekParam = params.get('week');
+  const weekStart = weekParam ? parseDate(weekParam) : getThisMonday();
+
+  // Format week label
+  function fmtDate(d) {
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  const weekKey = fmtDate(weekStart);
+  document.getElementById('weekLabel').textContent = fmtDate(weekStart) + ' – ' + fmtDate(weekEnd);
+
+  // Storage key
+  function storageKey(habit, dayIdx) {
+    return 'ht_' + weekKey + '_' + habit + '_' + dayIdx;
+  }
+
+  function getState(habit, dayIdx) {
+    return localStorage.getItem(storageKey(habit, dayIdx)) === '1';
+  }
+
+  function setState(habit, dayIdx, val) {
+    if (val) localStorage.setItem(storageKey(habit, dayIdx), '1');
+    else localStorage.removeItem(storageKey(habit, dayIdx));
+  }
+
+  // Build header
+  const header = document.getElementById('gridHeader');
+  dayLabels.forEach(lbl => {
+    const d = document.createElement('div');
+    d.className = 'day-label';
+    d.textContent = lbl;
+    header.appendChild(d);
+  });
+
+  // Build grid
+  const grid = document.getElementById('habitGrid');
+
+  habits.forEach(habit => {
+    const block = document.createElement('div');
+    block.className = 'habit-block';
+
+    // Row of cells
+    const row = document.createElement('div');
+    row.className = 'habit-row';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'habit-name';
+    nameEl.title = habit;
+    nameEl.textContent = habit;
+    row.appendChild(nameEl);
+
+    const cells = [];
+    for (let i = 0; i < 7; i++) {
+      const cell = document.createElement('button');
+      cell.className = 'habit-cell' + (getState(habit, i) ? ' checked' : '');
+      cell.setAttribute('aria-label', habit + ' ' + dayLabels[i]);
+      cell.innerHTML = getState(habit, i) ? '✓' : '';
+      cell.addEventListener('click', () => {
+        const now = !getState(habit, i);
+        setState(habit, i, now);
+        cell.classList.toggle('checked', now);
+        cell.innerHTML = now ? '✓' : '';
+        updateSummary();
+      });
+      cells.push(cell);
+      row.appendChild(cell);
+    }
+    block.appendChild(row);
+
+    // Summary row
+    const summaryRow = document.createElement('div');
+    summaryRow.className = 'habit-summary-row';
+    summaryRow.innerHTML = '<div></div>';
+    const summaryText = document.createElement('div');
+    summaryText.className = 'summary-text';
+    summaryRow.appendChild(summaryText);
+    block.appendChild(summaryRow);
+
+    function updateSummary() {
+      let count = 0;
+      for (let i = 0; i < 7; i++) if (getState(habit, i)) count++;
+      const pct = (count / 7 * 100).toFixed(0);
+      summaryText.innerHTML =
+        '<div class="summary-bar"><div class="summary-bar-fill" style="width:' + pct + '%"></div></div>' +
+        '<span>' + count + ' / 7' + (lang === 'zh' ? ' 天' : ' days') + '</span>';
+    }
+    updateSummary();
+
+    grid.appendChild(block);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pomodoro Timer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:#ffffff; --bg2:#f7f6f3; --text:#37352f; --text-dim:#9b9a97;
+    --accent:#2eaadc; --accent2:#0b6e99; --bar-bg:#e9e9e7;
+    --radius:10px; --font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --c1:#2eaadc; --c2:#0b6e99;
+  }
+  body.dark { --bg:#191919; --bg2:#252525; --text:#e6e6e4; --text-dim:#6b6b69; --bar-bg:#333333; }
+
+  body.preset-blue   { --c1:#2eaadc; --c2:#0b6e99; }
+  body.preset-purple { --c1:#9b59b6; --c2:#6c3483; }
+  body.preset-green  { --c1:#27ae60; --c2:#1e8449; }
+  body.preset-orange { --c1:#f39c12; --c2:#d68910; }
+  body.preset-pink   { --c1:#e91e8c; --c2:#a01060; }
+  body.preset-red    { --c1:#e74c3c; --c2:#c0392b; }
+  body.preset-teal   { --c1:#1abc9c; --c2:#148f77; }
+  body.preset-yellow { --c1:#f1c40f; --c2:#d4ac0d; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  .container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .timer-ring-wrap {
+    position: relative;
+    width: 200px;
+    height: 200px;
+  }
+
+  #timerSvg {
+    transform: rotate(-90deg);
+    overflow: visible;
+  }
+
+  .ring-bg {
+    fill: none;
+    stroke: var(--bar-bg);
+    stroke-width: 10;
+  }
+
+  .ring-progress {
+    fill: none;
+    stroke-width: 10;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.5s linear;
+  }
+
+  .timer-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .timer-display {
+    font-size: 2.6rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .timer-phase {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .buttons {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .btn {
+    border: none;
+    border-radius: 20px;
+    padding: 8px 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    font-family: var(--font);
+  }
+
+  .btn:hover { opacity: 0.85; }
+  .btn:active { transform: scale(0.96); }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--c1), var(--c2));
+    color: #fff;
+    min-width: 80px;
+  }
+
+  .btn-secondary {
+    background: var(--bg2);
+    color: var(--text-dim);
+    border: 1px solid var(--bar-bg);
+  }
+
+  .dots {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--bar-bg);
+    background: transparent;
+    transition: background 0.3s, border-color 0.3s;
+  }
+
+  .dot.filled {
+    background: linear-gradient(135deg, var(--c1), var(--c2));
+    border-color: transparent;
+  }
+
+  @keyframes flash {
+    0%,100% { opacity: 1; }
+    25%      { opacity: 0.3; }
+    50%      { opacity: 1; }
+    75%      { opacity: 0.3; }
+  }
+
+  .timer-ring-wrap.flash-anim {
+    animation: flash 0.6s ease;
+  }
+
+  /* SVG gradient needs inline */
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="timer-ring-wrap" id="ringWrap">
+    <svg id="timerSvg" viewBox="0 0 200 200" width="200" height="200">
+      <defs>
+        <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" id="gradStop1"/>
+          <stop offset="100%" id="gradStop2"/>
+        </linearGradient>
+      </defs>
+      <circle class="ring-bg" cx="100" cy="100" r="88"/>
+      <circle class="ring-progress" id="arcProgress" cx="100" cy="100" r="88"
+        stroke="url(#arcGrad)"
+        stroke-dasharray="553"
+        stroke-dashoffset="0"/>
+    </svg>
+    <div class="timer-center">
+      <div class="timer-display" id="timerDisplay">25:00</div>
+      <div class="timer-phase" id="timerPhase"></div>
+    </div>
+  </div>
+
+  <div class="buttons">
+    <button class="btn btn-secondary" id="btnReset">↺</button>
+    <button class="btn btn-primary" id="btnStartPause">▶</button>
+  </div>
+
+  <div class="dots" id="dots"></div>
+</div>
+
+<script>
+(function() {
+  const params = new URLSearchParams(location.search);
+
+  if (params.get('dark') === 'true') document.body.classList.add('dark');
+  const colorParam = params.get('color') || 'blue';
+  document.body.classList.add('preset-' + colorParam);
+
+  const lang = params.get('lang') || 'en';
+  const WORK_MIN  = parseInt(params.get('work'))  || 25;
+  const BREAK_MIN = parseInt(params.get('break')) || 5;
+  const LONG_MIN  = parseInt(params.get('long'))  || 15;
+
+  const labels = {
+    zh: { focus:'专注中', short:'休息中', long:'长休息', start:'▶ 开始', pause:'⏸ 暂停', reset:'↺' },
+    en: { focus:'Focus',  short:'Break',  long:'Long Break', start:'▶ Start', pause:'⏸ Pause', reset:'↺' }
+  };
+  const L = labels[lang] || labels.en;
+
+  // Set gradient colors from CSS vars
+  function setGradColors() {
+    const cs = getComputedStyle(document.body);
+    const c1 = cs.getPropertyValue('--c1').trim();
+    const c2 = cs.getPropertyValue('--c2').trim();
+    document.getElementById('gradStop1').setAttribute('stop-color', c1);
+    document.getElementById('gradStop2').setAttribute('stop-color', c2);
+  }
+  setGradColors();
+
+  const CIRCUMFERENCE = 2 * Math.PI * 88; // ~553
+  const arc = document.getElementById('arcProgress');
+  arc.setAttribute('stroke-dasharray', CIRCUMFERENCE);
+
+  let phase = 'work'; // 'work' | 'short' | 'long'
+  let pomCount = 0;   // completed pomodoros
+  let totalSecs = WORK_MIN * 60;
+  let remaining = totalSecs;
+  let running = false;
+  let interval = null;
+
+  const display = document.getElementById('timerDisplay');
+  const phaseEl = document.getElementById('timerPhase');
+  const startBtn = document.getElementById('btnStartPause');
+  const resetBtn = document.getElementById('btnReset');
+  const dotsEl = document.getElementById('dots');
+
+  function formatTime(s) {
+    const m = Math.floor(s / 60);
+    const ss = s % 60;
+    return String(m).padStart(2,'0') + ':' + String(ss).padStart(2,'0');
+  }
+
+  function getPhaseLabel() {
+    if (phase === 'work')  return L.focus;
+    if (phase === 'long')  return L.long;
+    return L.short;
+  }
+
+  function updateDisplay() {
+    display.textContent = formatTime(remaining);
+    phaseEl.textContent = getPhaseLabel();
+
+    // Arc: full = 0 offset, empty = CIRCUMFERENCE offset
+    const pct = remaining / totalSecs;
+    arc.style.strokeDashoffset = CIRCUMFERENCE * (1 - pct);
+  }
+
+  function updateDots() {
+    dotsEl.innerHTML = '';
+    for (let i = 0; i < 4; i++) {
+      const d = document.createElement('div');
+      d.className = 'dot' + (i < pomCount ? ' filled' : '');
+      dotsEl.appendChild(d);
+    }
+  }
+
+  function flash() {
+    const wrap = document.getElementById('ringWrap');
+    wrap.classList.remove('flash-anim');
+    void wrap.offsetWidth; // reflow
+    wrap.classList.add('flash-anim');
+    wrap.addEventListener('animationend', () => wrap.classList.remove('flash-anim'), { once: true });
+  }
+
+  function advancePhase() {
+    flash();
+    if (phase === 'work') {
+      pomCount = (pomCount % 4) + 1;
+      if (pomCount % 4 === 0) {
+        phase = 'long';
+        totalSecs = LONG_MIN * 60;
+      } else {
+        phase = 'short';
+        totalSecs = BREAK_MIN * 60;
+      }
+    } else {
+      phase = 'work';
+      totalSecs = WORK_MIN * 60;
+    }
+    remaining = totalSecs;
+    updateDots();
+    updateDisplay();
+    // Auto-advance: keep running
+    running = true;
+  }
+
+  function tick() {
+    if (!running) return;
+    remaining--;
+    if (remaining <= 0) {
+      remaining = 0;
+      updateDisplay();
+      advancePhase();
+      return;
+    }
+    updateDisplay();
+  }
+
+  function startTimer() {
+    if (running) return;
+    running = true;
+    interval = setInterval(tick, 1000);
+    startBtn.textContent = L.pause;
+  }
+
+  function pauseTimer() {
+    running = false;
+    clearInterval(interval);
+    startBtn.textContent = L.start;
+  }
+
+  function resetTimer() {
+    pauseTimer();
+    phase = 'work';
+    pomCount = 0;
+    totalSecs = WORK_MIN * 60;
+    remaining = totalSecs;
+    updateDots();
+    updateDisplay();
+    startBtn.textContent = L.start;
+  }
+
+  startBtn.addEventListener('click', () => {
+    if (running) pauseTimer();
+    else startTimer();
+  });
+
+  resetBtn.addEventListener('click', resetTimer);
+
+  // Initial state
+  startBtn.textContent = L.start;
+  resetBtn.textContent = L.reset;
+  updateDots();
+  updateDisplay();
+})();
+</script>
+</body>
+</html>

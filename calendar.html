@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendar</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:#ffffff; --bg2:#f7f6f3; --text:#37352f; --text-dim:#9b9a97;
+    --accent:#2eaadc; --accent2:#0b6e99; --bar-bg:#e9e9e7;
+    --radius:10px; --font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --c1:#2eaadc; --c2:#0b6e99;
+  }
+  body.dark { --bg:#191919; --bg2:#252525; --text:#e6e6e4; --text-dim:#6b6b69; --bar-bg:#333333; }
+
+  body.preset-blue   { --c1:#2eaadc; --c2:#0b6e99; }
+  body.preset-purple { --c1:#9b59b6; --c2:#6c3483; }
+  body.preset-green  { --c1:#27ae60; --c2:#1e8449; }
+  body.preset-orange { --c1:#f39c12; --c2:#d68910; }
+  body.preset-pink   { --c1:#e91e8c; --c2:#a01060; }
+  body.preset-red    { --c1:#e74c3c; --c2:#c0392b; }
+  body.preset-teal   { --c1:#1abc9c; --c2:#148f77; }
+  body.preset-yellow { --c1:#f1c40f; --c2:#d4ac0d; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+    min-height: 100vh;
+  }
+
+  .cal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .cal-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+
+  .nav-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1rem;
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    line-height: 1;
+    padding: 0;
+  }
+  .nav-btn:hover {
+    background: var(--bg2);
+    color: var(--text);
+  }
+
+  .cal-grid {
+    display: grid;
+    gap: 2px;
+  }
+
+  /* With week numbers: 8 cols. Without: 7 cols */
+  .cal-grid.no-weeknum { grid-template-columns: repeat(7, 1fr); }
+  .cal-grid.has-weeknum { grid-template-columns: 28px repeat(7, 1fr); }
+
+  .cal-cell {
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    font-size: 0.78rem;
+    position: relative;
+    cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background 0.12s;
+  }
+
+  .cal-cell.day-header {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: default;
+    height: 24px;
+  }
+
+  .cal-cell.weeknum {
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    font-weight: 500;
+    cursor: default;
+  }
+
+  .cal-cell.other-month {
+    color: var(--text-dim);
+    opacity: 0.5;
+  }
+
+  .cal-cell.weekend {
+    background: rgba(0,0,0,0.02);
+  }
+  body.dark .cal-cell.weekend {
+    background: rgba(255,255,255,0.03);
+  }
+
+  .cal-cell.day:hover {
+    background: var(--bg2);
+  }
+
+  .cal-cell.today {
+    background: linear-gradient(135deg, var(--c1), var(--c2)) !important;
+    color: #fff !important;
+    font-weight: 700;
+    opacity: 1 !important;
+  }
+
+  .cal-cell.today:hover {
+    opacity: 0.9 !important;
+  }
+</style>
+</head>
+<body>
+<div class="cal-header">
+  <button class="nav-btn" id="btnPrev">&#8592;</button>
+  <div class="cal-title" id="calTitle"></div>
+  <button class="nav-btn" id="btnNext">&#8594;</button>
+</div>
+<div class="cal-grid" id="calGrid"></div>
+
+<script>
+(function() {
+  const params = new URLSearchParams(location.search);
+
+  if (params.get('dark') === 'true') document.body.classList.add('dark');
+  const colorParam = params.get('color') || 'blue';
+  document.body.classList.add('preset-' + colorParam);
+
+  const lang = params.get('lang') || 'en';
+  const firstDay = parseInt(params.get('firstday')) || 0; // 0=Sun, 1=Mon
+  const showWeekNum = params.get('showweeknum') === 'true';
+
+  const monthNamesEn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const monthNamesZh = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  const monthNames = lang === 'zh' ? monthNamesZh : monthNamesEn;
+
+  // Day headers: 7 days starting from firstDay
+  const dayNamesEn = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dayNamesZh = ['日','一','二','三','四','五','六'];
+  const dayNamesBase = lang === 'zh' ? dayNamesZh : dayNamesEn;
+
+  // Build ordered day names starting from firstDay
+  function orderedDayNames() {
+    const names = [];
+    for (let i = 0; i < 7; i++) names.push(dayNamesBase[(firstDay + i) % 7]);
+    return names;
+  }
+
+  // ISO week number
+  function getISOWeek(d) {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+  }
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  let viewYear = today.getFullYear();
+  let viewMonth = today.getMonth();
+
+  function renderCalendar() {
+    const grid = document.getElementById('calGrid');
+    const title = document.getElementById('calTitle');
+
+    grid.innerHTML = '';
+    grid.className = 'cal-grid ' + (showWeekNum ? 'has-weeknum' : 'no-weeknum');
+
+    title.textContent = monthNames[viewMonth] + (lang === 'zh' ? ' ' + viewYear : ' ' + viewYear);
+
+    const orderedNames = orderedDayNames();
+
+    // Header row
+    if (showWeekNum) {
+      const wh = document.createElement('div');
+      wh.className = 'cal-cell day-header';
+      wh.textContent = lang === 'zh' ? 'W' : 'W';
+      grid.appendChild(wh);
+    }
+    orderedNames.forEach((name, idx) => {
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell day-header';
+      // Weekend detection: actual day of week
+      const actualDow = (firstDay + idx) % 7;
+      if (actualDow === 0 || actualDow === 6) cell.classList.add('weekend');
+      cell.textContent = name;
+      grid.appendChild(cell);
+    });
+
+    // First day of view month
+    const firstOfMonth = new Date(viewYear, viewMonth, 1);
+    const lastOfMonth = new Date(viewYear, viewMonth + 1, 0);
+
+    // Day of week of firstOfMonth (0=Sun)
+    let startDow = firstOfMonth.getDay(); // 0=Sun
+    // Offset from firstDay
+    let offset = (startDow - firstDay + 7) % 7;
+
+    // Start date (may be in prev month)
+    const gridStart = new Date(firstOfMonth);
+    gridStart.setDate(1 - offset);
+
+    // We need 6 rows x 7 cols = 42 cells
+    const totalCells = 42;
+
+    let currentDate = new Date(gridStart);
+    let rowStart = new Date(gridStart); // track row start for week number
+
+    for (let i = 0; i < totalCells; i++) {
+      // Week number at start of each row
+      if (i % 7 === 0 && showWeekNum) {
+        const wn = document.createElement('div');
+        wn.className = 'cal-cell weeknum';
+        wn.textContent = getISOWeek(currentDate);
+        grid.appendChild(wn);
+      }
+
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell day';
+
+      const isCurrentMonth = (currentDate.getMonth() === viewMonth && currentDate.getFullYear() === viewYear);
+      const isToday = (currentDate.getTime() === today.getTime());
+
+      // Determine actual day of week for weekend tint
+      const dow = currentDate.getDay(); // 0=Sun
+      const isWeekend = (dow === 0 || dow === 6);
+
+      if (!isCurrentMonth) cell.classList.add('other-month');
+      if (isWeekend) cell.classList.add('weekend');
+      if (isToday) cell.classList.add('today');
+
+      cell.textContent = currentDate.getDate();
+      grid.appendChild(cell);
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+  }
+
+  document.getElementById('btnPrev').addEventListener('click', () => {
+    viewMonth--;
+    if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+    renderCalendar();
+  });
+
+  document.getElementById('btnNext').addEventListener('click', () => {
+    viewMonth++;
+    if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+    renderCalendar();
+  });
+
+  renderCalendar();
+})();
+</script>
+</body>
+</html>

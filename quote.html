@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quote Widget</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #ffffff;
+    --bg2:       #f7f6f3;
+    --text:      #37352f;
+    --text-dim:  #9b9a97;
+    --accent:    #2eaadc;
+    --bar-bg:    #e9e9e7;
+    --radius:    10px;
+    --font:      -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  body.dark {
+    --bg:       #191919;
+    --bg2:      #252525;
+    --text:     #e6e6e4;
+    --text-dim: #6b6b69;
+    --bar-bg:   #333333;
+  }
+
+  body.color-blue   { --accent: #2eaadc; }
+  body.color-purple { --accent: #9b59b6; }
+  body.color-green  { --accent: #27ae60; }
+  body.color-orange { --accent: #f39c12; }
+  body.color-pink   { --accent: #e91e8c; }
+  body.color-red    { --accent: #e74c3c; }
+  body.color-teal   { --accent: #1abc9c; }
+  body.color-yellow { --accent: #f1c40f; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px 28px 20px;
+    transition: background .3s, color .3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .quote-wrap {
+    width: 100%;
+    max-width: 640px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* Decorative quote mark */
+  .q-mark {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 5rem;
+    line-height: 1;
+    color: var(--accent);
+    opacity: 0.85;
+    margin-bottom: -16px;
+    margin-left: -4px;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  /* Content area fades */
+  .q-content {
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .q-content.fading {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  /* Size variants */
+  .size-small  .q-text { font-size: clamp(0.82rem, 2.5vw, 1rem); }
+  .size-medium .q-text { font-size: clamp(0.95rem, 3vw, 1.2rem); }
+  .size-large  .q-text { font-size: clamp(1.15rem, 4vw, 1.6rem); }
+
+  .size-small  .q-mark { font-size: 3.5rem; margin-bottom: -12px; }
+  .size-large  .q-mark { font-size: 6.5rem; margin-bottom: -24px; }
+
+  .q-text {
+    font-weight: 450;
+    line-height: 1.65;
+    color: var(--text);
+    font-style: normal;
+    margin-bottom: 16px;
+  }
+
+  .q-author {
+    font-size: 0.82em;
+    color: var(--text-dim);
+    font-weight: 500;
+    letter-spacing: 0.03em;
+  }
+
+  .q-author::before {
+    content: '— ';
+  }
+
+  /* Navigation arrows */
+  .nav-arrows {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: absolute;
+    top: 50%;
+    left: -16px;
+    right: -16px;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+
+  .nav-btn {
+    width: 30px;
+    height: 30px;
+    border: none;
+    background: var(--bg2);
+    color: var(--text-dim);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .2s, background .2s, color .2s;
+    pointer-events: all;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  .quote-wrap:hover .nav-btn,
+  .nav-btn:focus {
+    opacity: 1;
+  }
+
+  .nav-btn:hover {
+    background: var(--bar-bg);
+    color: var(--text);
+  }
+
+  /* Dot navigation */
+  .q-dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 18px;
+    flex-wrap: wrap;
+  }
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--bar-bg);
+    cursor: pointer;
+    transition: background .2s, transform .2s;
+    flex-shrink: 0;
+    border: none;
+    padding: 0;
+  }
+
+  .dot.active {
+    background: var(--accent);
+    transform: scale(1.35);
+  }
+
+  .dot:hover:not(.active) {
+    background: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+<div class="quote-wrap size-medium" id="qwrap">
+  <div class="q-mark">"</div>
+  <div class="q-content" id="qcontent">
+    <div class="q-text" id="qtext"></div>
+    <div class="q-author" id="qauthor"></div>
+  </div>
+  <div class="nav-arrows">
+    <button class="nav-btn" id="btn-prev" aria-label="Previous">&#8592;</button>
+    <button class="nav-btn" id="btn-next" aria-label="Next">&#8594;</button>
+  </div>
+</div>
+<div class="q-dots" id="qdots"></div>
+
+<script>
+const P = new URLSearchParams(location.search);
+
+const cfg = {
+  dark:     P.get('dark') === 'true' || matchMedia('(prefers-color-scheme:dark)').matches,
+  lang:     P.get('lang') || 'en',
+  color:    P.get('color') || 'blue',
+  interval: parseInt(P.get('interval') || '0', 10),
+  category: P.get('category') || 'motivational',
+  size:     P.get('size') || 'medium',
+};
+
+if (cfg.dark) document.body.classList.add('dark');
+document.body.classList.add('color-' + cfg.color);
+document.getElementById('qwrap').classList.remove('size-medium');
+document.getElementById('qwrap').classList.add('size-' + cfg.size);
+
+// ── Quote Library ─────────────────────────────────────────────────
+const QUOTES = {
+  motivational: [
+    { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
+    { text: "It does not matter how slowly you go as long as you do not stop.", author: "Confucius" },
+    { text: "Everything you've ever wanted is on the other side of fear.", author: "George Addair" },
+    { text: "Success is not final, failure is not fatal: it is the courage to continue that counts.", author: "Winston Churchill" },
+    { text: "Believe you can and you're halfway there.", author: "Theodore Roosevelt" },
+    { text: "The future belongs to those who believe in the beauty of their dreams.", author: "Eleanor Roosevelt" },
+    { text: "It is during our darkest moments that we must focus to see the light.", author: "Aristotle" },
+    { text: "Do not go where the path may lead; go instead where there is no path and leave a trail.", author: "Ralph Waldo Emerson" },
+    { text: "You are never too old to set another goal or to dream a new dream.", author: "C.S. Lewis" },
+    { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+    { text: "Act as if what you do makes a difference. It does.", author: "William James" },
+    { text: "What you get by achieving your goals is not as important as what you become by achieving them.", author: "Zig Ziglar" },
+    { text: "The mind is everything. What you think, you become.", author: "Buddha" },
+    { text: "Hardships often prepare ordinary people for an extraordinary destiny.", author: "C.S. Lewis" },
+    { text: "You miss 100% of the shots you don't take.", author: "Wayne Gretzky" },
+    { text: "Whether you think you can or you think you can't, you're right.", author: "Henry Ford" },
+    { text: "Start where you are. Use what you have. Do what you can.", author: "Arthur Ashe" },
+  ],
+  tech: [
+    { text: "Any fool can write code that a computer can understand. Good programmers write code that humans can understand.", author: "Martin Fowler" },
+    { text: "First, solve the problem. Then, write the code.", author: "John Johnson" },
+    { text: "Measuring programming progress by lines of code is like measuring aircraft building progress by weight.", author: "Bill Gates" },
+    { text: "The most dangerous phrase in the language is, 'We've always done it this way.'", author: "Grace Hopper" },
+    { text: "Simplicity is the soul of efficiency.", author: "Austin Freeman" },
+    { text: "Programs must be written for people to read, and only incidentally for machines to execute.", author: "Harold Abelson" },
+    { text: "Debugging is twice as hard as writing the code in the first place.", author: "Brian Kernighan" },
+    { text: "The function of good software is to make the complex appear simple.", author: "Grady Booch" },
+    { text: "Walking on water and developing software from a specification are easy if both are frozen.", author: "Edward V. Berard" },
+    { text: "Software is a great combination of artistry and engineering.", author: "Bill Gates" },
+    { text: "Premature optimization is the root of all evil.", author: "Donald Knuth" },
+    { text: "If debugging is the process of removing bugs, then programming must be the process of putting them in.", author: "Edsger W. Dijkstra" },
+    { text: "The best performance improvement is the transition from the nonworking state to the working state.", author: "John Ousterhout" },
+    { text: "Good code is its own best documentation.", author: "Steve McConnell" },
+    { text: "Real programmers don't comment their code. If it was hard to write, it should be hard to understand.", author: "Tom Van Vleck" },
+    { text: "Make it work, make it right, make it fast.", author: "Kent Beck" },
+    { text: "It's not a bug — it's an undocumented feature.", author: "Anonymous" },
+  ],
+  life: [
+    { text: "Life is what happens when you're busy making other plans.", author: "John Lennon" },
+    { text: "The purpose of life is not to be happy. It is to be useful, to be honorable, to be compassionate.", author: "Ralph Waldo Emerson" },
+    { text: "In the end, it's not the years in your life that count. It's the life in your years.", author: "Abraham Lincoln" },
+    { text: "Life is really simple, but we insist on making it complicated.", author: "Confucius" },
+    { text: "To live is the rarest thing in the world. Most people exist, that is all.", author: "Oscar Wilde" },
+    { text: "Twenty years from now you will be more disappointed by the things that you didn't do than by the ones you did.", author: "Mark Twain" },
+    { text: "Life is short, and it is up to you to make it sweet.", author: "Sarah Louise Delany" },
+    { text: "Not how long, but how well you have lived is the main thing.", author: "Seneca" },
+    { text: "The only impossible journey is the one you never begin.", author: "Tony Robbins" },
+    { text: "Be yourself; everyone else is already taken.", author: "Oscar Wilde" },
+    { text: "Two things are infinite: the universe and human stupidity; and I'm not sure about the universe.", author: "Albert Einstein" },
+    { text: "You only live once, but if you do it right, once is enough.", author: "Mae West" },
+    { text: "The unexamined life is not worth living.", author: "Socrates" },
+    { text: "Do not dwell in the past, do not dream of the future. Concentrate the mind on the present moment.", author: "Buddha" },
+    { text: "Life isn't about finding yourself. Life is about creating yourself.", author: "George Bernard Shaw" },
+    { text: "We accept the love we think we deserve.", author: "Stephen Chbosky" },
+  ],
+  zen: [
+    { text: "Before enlightenment, chop wood, carry water. After enlightenment, chop wood, carry water.", author: "Zen Proverb" },
+    { text: "The obstacle is the path.", author: "Zen Proverb" },
+    { text: "If you realize you have enough, you are truly rich.", author: "Lao Tzu" },
+    { text: "When you realize nothing is lacking, the whole world belongs to you.", author: "Lao Tzu" },
+    { text: "The quieter you become, the more you can hear.", author: "Ram Dass" },
+    { text: "Tension is who you think you should be. Relaxation is who you are.", author: "Chinese Proverb" },
+    { text: "Empty your mind, be formless, shapeless — like water.", author: "Bruce Lee" },
+    { text: "Nature does not hurry, yet everything is accomplished.", author: "Lao Tzu" },
+    { text: "To the mind that is still, the whole universe surrenders.", author: "Lao Tzu" },
+    { text: "Do you have the patience to wait until your mud settles and the water is clear?", author: "Lao Tzu" },
+    { text: "When walking, walk. When eating, eat.", author: "Zen Proverb" },
+    { text: "A single thread of light dispels ten thousand years of darkness.", author: "Zen Saying" },
+    { text: "Not thinking about anything is Zen. Once you know this, walking, sitting, or lying down, everything you do is Zen.", author: "Bodhidharma" },
+    { text: "The way is not in the sky. The way is in the heart.", author: "Buddha" },
+    { text: "Let go, or be dragged.", author: "Zen Proverb" },
+    { text: "Knowing others is wisdom; knowing yourself is enlightenment.", author: "Lao Tzu" },
+    { text: "Be here now.", author: "Ram Dass" },
+  ],
+};
+
+const pool = QUOTES[cfg.category] || QUOTES.motivational;
+let current = Math.floor(Math.random() * pool.length);
+
+function showQuote(idx, animate) {
+  const content = document.getElementById('qcontent');
+  if (animate) {
+    content.classList.add('fading');
+    setTimeout(() => {
+      document.getElementById('qtext').textContent = pool[idx].text;
+      document.getElementById('qauthor').textContent = pool[idx].author;
+      content.classList.remove('fading');
+      updateDots(idx);
+    }, 360);
+  } else {
+    document.getElementById('qtext').textContent = pool[idx].text;
+    document.getElementById('qauthor').textContent = pool[idx].author;
+    updateDots(idx);
+  }
+}
+
+function goTo(idx, animate) {
+  current = ((idx % pool.length) + pool.length) % pool.length;
+  showQuote(current, animate);
+}
+
+function buildDots() {
+  const dotsEl = document.getElementById('qdots');
+  dotsEl.innerHTML = '';
+  // Show max 20 dots; if more, just show a count
+  const max = 20;
+  if (pool.length <= max) {
+    pool.forEach((_, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'dot' + (i === current ? ' active' : '');
+      btn.setAttribute('aria-label', 'Quote ' + (i + 1));
+      btn.addEventListener('click', () => goTo(i, true));
+      dotsEl.appendChild(btn);
+    });
+  } else {
+    // Sliding window: show up to 7 dots around current
+    const half = 3;
+    const start = Math.max(0, Math.min(current - half, pool.length - 7));
+    const end = Math.min(pool.length - 1, start + 6);
+    for (let i = start; i <= end; i++) {
+      const btn = document.createElement('button');
+      btn.className = 'dot' + (i === current ? ' active' : '');
+      btn.dataset.idx = i;
+      btn.setAttribute('aria-label', 'Quote ' + (i + 1));
+      btn.addEventListener('click', () => goTo(i, true));
+      dotsEl.appendChild(btn);
+    }
+  }
+}
+
+function updateDots(idx) {
+  buildDots(); // rebuild to handle sliding window
+}
+
+document.getElementById('btn-prev').addEventListener('click', () => goTo(current - 1, true));
+document.getElementById('btn-next').addEventListener('click', () => goTo(current + 1, true));
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') goTo(current - 1, true);
+  if (e.key === 'ArrowRight') goTo(current + 1, true);
+});
+
+// Init
+showQuote(current, false);
+buildDots();
+
+// Auto-rotate
+if (cfg.interval > 0) {
+  setInterval(() => goTo(current + 1, true), cfg.interval * 1000);
+}
+
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'notion-color-scheme') {
+    document.body.classList.toggle('dark', e.data.value === 'dark');
+  }
+});
+</script>
+</body>
+</html>

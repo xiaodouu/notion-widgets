@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stats Card</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:#ffffff; --bg2:#f7f6f3; --text:#37352f; --text-dim:#9b9a97;
+    --accent:#2eaadc; --accent2:#0b6e99; --bar-bg:#e9e9e7;
+    --radius:10px; --font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --c1:#2eaadc; --c2:#0b6e99;
+  }
+  body.dark { --bg:#191919; --bg2:#252525; --text:#e6e6e4; --text-dim:#6b6b69; --bar-bg:#333333; }
+
+  body.preset-blue   { --c1:#2eaadc; --c2:#0b6e99; }
+  body.preset-purple { --c1:#9b59b6; --c2:#6c3483; }
+  body.preset-green  { --c1:#27ae60; --c2:#1e8449; }
+  body.preset-orange { --c1:#f39c12; --c2:#d68910; }
+  body.preset-pink   { --c1:#e91e8c; --c2:#a01060; }
+  body.preset-red    { --c1:#e74c3c; --c2:#c0392b; }
+  body.preset-teal   { --c1:#1abc9c; --c2:#148f77; }
+  body.preset-yellow { --c1:#f1c40f; --c2:#d4ac0d; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+    min-height: 100vh;
+  }
+
+  .grid {
+    display: grid;
+    gap: 12px;
+  }
+  .grid.cols-1 { grid-template-columns: 1fr; }
+  .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+
+  /* Card style */
+  .stat-card {
+    background: var(--bg2);
+    border-radius: 12px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card.style-card {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  }
+  .stat-card.style-minimal {
+    background: transparent;
+    box-shadow: none;
+    padding: 8px 0;
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .stat-number {
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  .stat-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .stat-trend {
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .trend-up   { color: #27ae60; }
+  .trend-down { color: #e74c3c; }
+  .trend-flat { color: var(--text-dim); }
+
+  .stat-unit {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+
+  /* Color map for per-stat colors */
+  .color-blue   { color: #2eaadc; }
+  .color-purple { color: #9b59b6; }
+  .color-green  { color: #27ae60; }
+  .color-orange { color: #f39c12; }
+  .color-pink   { color: #e91e8c; }
+  .color-red    { color: #e74c3c; }
+  .color-teal   { color: #1abc9c; }
+  .color-yellow { color: #f1c40f; }
+  .color-default{ color: var(--c1); }
+
+  /* Subtle top accent line on card */
+  .stat-card.style-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--accent-line, var(--c1));
+    border-radius: 12px 12px 0 0;
+  }
+</style>
+</head>
+<body>
+<div class="grid" id="statsGrid"></div>
+
+<script>
+(function() {
+  const params = new URLSearchParams(location.search);
+
+  if (params.get('dark') === 'true') document.body.classList.add('dark');
+
+  const colorParam = params.get('color') || 'blue';
+  document.body.classList.add('preset-' + colorParam);
+
+  const colsParam = parseInt(params.get('cols')) || 2;
+  const styleParam = params.get('style') || 'card';
+
+  // Color map
+  const colorMap = {
+    blue:   ['#2eaadc','#0b6e99'],
+    purple: ['#9b59b6','#6c3483'],
+    green:  ['#27ae60','#1e8449'],
+    orange: ['#f39c12','#d68910'],
+    pink:   ['#e91e8c','#a01060'],
+    red:    ['#e74c3c','#c0392b'],
+    teal:   ['#1abc9c','#148f77'],
+    yellow: ['#f1c40f','#d4ac0d'],
+  };
+
+  const statsParam = params.get('stats') ||
+    'Revenue:12400:USD:green:up;Users:1247:people:blue:up;Conv Rate:3.2:%:orange:flat';
+
+  const stats = statsParam.split(';').map(s => {
+    const parts = s.split(':');
+    return {
+      label: parts[0] || '',
+      value: parts[1] || '0',
+      unit:  parts[2] || '',
+      color: parts[3] || colorParam,
+      trend: parts[4] || '',
+    };
+  }).filter(s => s.label);
+
+  const grid = document.getElementById('statsGrid');
+  grid.className = 'grid cols-' + Math.min(Math.max(colsParam, 1), 3);
+
+  // Parse numeric value for animation
+  function parseNumeric(str) {
+    const cleaned = str.replace(/[^0-9.]/g, '');
+    return parseFloat(cleaned) || 0;
+  }
+
+  // Get prefix/suffix around the number
+  function getPrefix(str) {
+    const m = str.match(/^([^0-9]*)[0-9]/);
+    return m ? m[1] : '';
+  }
+  function getSuffix(str) {
+    const m = str.match(/[0-9]([^0-9]*)$/);
+    return m ? m[1] : '';
+  }
+
+  // Determine decimal places
+  function getDecimals(str) {
+    const m = str.match(/\.(\d+)/);
+    return m ? m[1].length : 0;
+  }
+
+  // Format number with thousand separators
+  function fmtNumber(n, decimals, prefix, suffix, origStr) {
+    // Preserve comma formatting if original had commas
+    const hasComma = origStr.includes(',');
+    let s = n.toFixed(decimals);
+    if (hasComma) {
+      const parts = s.split('.');
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      s = parts.join('.');
+    }
+    return prefix + s + suffix;
+  }
+
+  stats.forEach(stat => {
+    const card = document.createElement('div');
+    card.className = 'stat-card style-' + styleParam;
+
+    // Set accent line color
+    const colors = colorMap[stat.color] || colorMap[colorParam] || colorMap.blue;
+    card.style.setProperty('--accent-line', colors[0]);
+
+    const numVal = parseNumeric(stat.value);
+    const prefix = getPrefix(stat.value);
+    const suffix = getSuffix(stat.value);
+    const decimals = getDecimals(stat.value);
+    const colorClass = 'color-' + (colorMap[stat.color] ? stat.color : 'default');
+
+    // Trend
+    let trendHtml = '';
+    if (stat.trend === 'up')   trendHtml = '<span class="stat-trend trend-up">↑ Up</span>';
+    else if (stat.trend === 'down') trendHtml = '<span class="stat-trend trend-down">↓ Down</span>';
+    else if (stat.trend === 'flat') trendHtml = '<span class="stat-trend trend-flat">→ Flat</span>';
+
+    card.innerHTML =
+      '<div class="stat-label">' + escHtml(stat.label) + '</div>' +
+      '<div class="stat-number ' + colorClass + '" data-target="' + numVal + '" data-decimals="' + decimals +
+        '" data-prefix="' + escHtml(prefix) + '" data-suffix="' + escHtml(suffix) + '" data-orig="' + escHtml(stat.value) + '">0</div>' +
+      '<div class="stat-footer">' +
+        (trendHtml || '<span></span>') +
+        '<span class="stat-unit">' + escHtml(stat.unit) + '</span>' +
+      '</div>';
+
+    grid.appendChild(card);
+  });
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Animate numbers
+  function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+
+  const duration = 800;
+  const start = performance.now();
+
+  const numberEls = document.querySelectorAll('.stat-number');
+
+  function animate(now) {
+    const elapsed = now - start;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = easeOut(progress);
+
+    numberEls.forEach(el => {
+      const target = parseFloat(el.dataset.target);
+      const decimals = parseInt(el.dataset.decimals);
+      const prefix = el.dataset.prefix;
+      const suffix = el.dataset.suffix;
+      const orig = el.dataset.orig;
+      const current = target * eased;
+      el.textContent = fmtNumber(current, decimals, prefix, suffix, orig);
+    });
+
+    if (progress < 1) requestAnimationFrame(animate);
+    else {
+      // Snap to exact original value string
+      numberEls.forEach(el => {
+        el.textContent = el.dataset.orig;
+      });
+    }
+  }
+
+  requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>

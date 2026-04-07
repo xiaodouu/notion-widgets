@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Progress Widget</title>
+<style>
+  /* ── Reset & Base ─────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #ffffff;
+    --bg2:       #f7f6f3;
+    --text:      #37352f;
+    --text-dim:  #9b9a97;
+    --accent:    #2eaadc;
+    --accent2:   #0b6e99;
+    --bar-bg:    #e9e9e7;
+    --radius:    10px;
+    --font:      -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  body.dark {
+    --bg:       #191919;
+    --bg2:      #252525;
+    --text:     #e6e6e4;
+    --text-dim: #6b6b69;
+    --bar-bg:   #333333;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    padding: 18px 20px 14px;
+    min-height: 100vh;
+    transition: background .3s, color .3s;
+  }
+
+  /* ── Widget Card ──────────────────────────────── */
+  .widget {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  /* ── Row ──────────────────────────────────────── */
+  .row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .row-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .label {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .value {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Track & Fill ─────────────────────────────── */
+  .track {
+    width: 100%;
+    height: 7px;
+    background: var(--bar-bg);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--c1), var(--c2));
+    transition: width .8s cubic-bezier(.4,0,.2,1);
+    position: relative;
+  }
+
+  /* Shimmer on fill */
+  .fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg,
+      transparent 0%, rgba(255,255,255,.25) 50%, transparent 100%);
+    animation: shimmer 2.4s ease-in-out infinite;
+    border-radius: inherit;
+  }
+
+  @keyframes shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+  }
+
+  /* ── Divider ──────────────────────────────────── */
+  .divider {
+    height: 1px;
+    background: var(--bar-bg);
+    margin: 2px 0;
+  }
+
+  /* ── Custom Section Title ─────────────────────── */
+  .section-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+  }
+
+  /* ── Color Presets ────────────────────────────── */
+  .preset-blue   { --c1: #2eaadc; --c2: #0b6e99; }
+  .preset-purple { --c1: #9b59b6; --c2: #6c3483; }
+  .preset-green  { --c1: #27ae60; --c2: #1e8449; }
+  .preset-orange { --c1: #f39c12; --c2: #d68910; }
+  .preset-pink   { --c1: #e91e8c; --c2: #a01060; }
+  .preset-red    { --c1: #e74c3c; --c2: #c0392b; }
+  .preset-teal   { --c1: #1abc9c; --c2: #148f77; }
+  .preset-yellow { --c1: #f1c40f; --c2: #d4ac0d; }
+
+  /* Per-row accent overrides */
+  .row[data-color="blue"]   .fill { --c1:#2eaadc; --c2:#0b6e99; }
+  .row[data-color="purple"] .fill { --c1:#9b59b6; --c2:#6c3483; }
+  .row[data-color="green"]  .fill { --c1:#27ae60; --c2:#1e8449; }
+  .row[data-color="orange"] .fill { --c1:#f39c12; --c2:#d68910; }
+  .row[data-color="pink"]   .fill { --c1:#e91e8c; --c2:#a01060; }
+  .row[data-color="red"]    .fill { --c1:#e74c3c; --c2:#c0392b; }
+  .row[data-color="teal"]   .fill { --c1:#1abc9c; --c2:#148f77; }
+  .row[data-color="yellow"] .fill { --c1:#f1c40f; --c2:#d4ac0d; }
+</style>
+</head>
+<body>
+
+<div class="widget" id="widget"></div>
+
+<script>
+// ── URL Param Parser ─────────────────────────────────────────────
+const P = new URLSearchParams(location.search);
+
+const cfg = {
+  dark:    P.get('dark')  === 'true' || matchMedia('(prefers-color-scheme:dark)').matches,
+  lang:    P.get('lang')  || 'zh',         // zh | en
+  color:   P.get('color') || 'blue',       // global color preset
+  fmt:     P.get('fmt')   || 'pct',        // pct | frac | days
+  bars:    (P.get('bars') || 'year,month,week,day').split(','),
+  // custom bars: "label:current:total:color" comma separated
+  custom:  P.get('custom') ? P.get('custom').split(';') : [],
+};
+
+if (cfg.dark) document.body.classList.add('dark');
+document.body.classList.add(`preset-${cfg.color}`);
+
+// ── Labels ───────────────────────────────────────────────────────
+const LABELS = {
+  zh: { year:'年', month:'月', week:'周', day:'今日', quarter:'季度',
+        life:'人生', custom:'自定义' },
+  en: { year:'Year', month:'Month', week:'Week', day:'Day',
+        quarter:'Quarter', life:'Life', custom:'Custom' },
+};
+const L = (k) => LABELS[cfg.lang]?.[k] || k;
+
+// ── Date Calculations ────────────────────────────────────────────
+function getProgress(type) {
+  const now  = new Date();
+  const y    = now.getFullYear();
+  const m    = now.getMonth();
+  const d    = now.getDate();
+  const h    = now.getHours();
+  const min  = now.getMinutes();
+
+  switch (type) {
+    case 'year': {
+      const start = new Date(y, 0, 1);
+      const end   = new Date(y + 1, 0, 1);
+      const total = (end - start) / 86400000;
+      const done  = Math.floor((now - start) / 86400000);
+      return { pct: done / total, done, total: Math.round(total), unit: cfg.lang==='zh' ? '天' : 'd' };
+    }
+    case 'quarter': {
+      const q     = Math.floor(m / 3);
+      const start = new Date(y, q * 3, 1);
+      const end   = new Date(y, q * 3 + 3, 1);
+      const total = Math.round((end - start) / 86400000);
+      const done  = Math.round((now - start) / 86400000);
+      return { pct: done / total, done, total, unit: cfg.lang==='zh' ? '天' : 'd' };
+    }
+    case 'month': {
+      const total = new Date(y, m + 1, 0).getDate();
+      return { pct: (d - 1) / total, done: d, total, unit: cfg.lang==='zh' ? '日' : 'd' };
+    }
+    case 'week': {
+      const dow   = (now.getDay() + 6) % 7; // Mon=0
+      return { pct: dow / 7, done: dow + 1, total: 7, unit: cfg.lang==='zh' ? '天' : 'd' };
+    }
+    case 'day': {
+      const mins  = h * 60 + min;
+      return { pct: mins / 1440, done: h, total: 24, unit: cfg.lang==='zh' ? '时' : 'h' };
+    }
+    case 'life': {
+      const birth = P.get('birth') ? new Date(P.get('birth')) : new Date('1995-01-01');
+      const span  = parseInt(P.get('span') || '80');
+      const end   = new Date(birth);
+      end.setFullYear(end.getFullYear() + span);
+      const total = (end - birth) / (365.25 * 86400000);
+      const done  = (now - birth) / (365.25 * 86400000);
+      return { pct: done / total, done: Math.floor(done), total: span, unit: cfg.lang==='zh' ? '年' : 'y' };
+    }
+    default: return null;
+  }
+}
+
+// ── Format Value ─────────────────────────────────────────────────
+function fmt(p, done, total, unit) {
+  if (cfg.fmt === 'frac') return `${done}${unit} / ${total}${unit}`;
+  if (cfg.fmt === 'days') return `${done}${unit}`;
+  return `${(p * 100).toFixed(1)}%`;
+}
+
+// ── Render ───────────────────────────────────────────────────────
+function render() {
+  const w = document.getElementById('widget');
+  w.innerHTML = '';
+
+  // Time bars
+  for (const type of cfg.bars) {
+    const info = getProgress(type);
+    if (!info) continue;
+    const pct  = Math.min(Math.max(info.pct, 0), 1);
+    const row  = document.createElement('div');
+    row.className = 'row';
+    row.dataset.color = cfg.color;
+    row.innerHTML = `
+      <div class="row-header">
+        <span class="label">${L(type)}</span>
+        <span class="value">${fmt(pct, info.done, info.total, info.unit)}</span>
+      </div>
+      <div class="track">
+        <div class="fill" style="width:${(pct*100).toFixed(2)}%"></div>
+      </div>`;
+    w.appendChild(row);
+  }
+
+  // Custom bars
+  if (cfg.custom.length > 0) {
+    if (cfg.bars.length > 0) {
+      const d = document.createElement('div');
+      d.className = 'divider';
+      w.appendChild(d);
+    }
+    for (const item of cfg.custom) {
+      // format: "label:current:total:color"
+      const parts  = item.split(':');
+      const label  = decodeURIComponent(parts[0] || '');
+      const cur    = parseFloat(parts[1]) || 0;
+      const total  = parseFloat(parts[2]) || 100;
+      const color  = parts[3] || cfg.color;
+      const pct    = Math.min(Math.max(cur / total, 0), 1);
+
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.dataset.color = color;
+      row.innerHTML = `
+        <div class="row-header">
+          <span class="label">${label}</span>
+          <span class="value">${(pct*100).toFixed(1)}%</span>
+        </div>
+        <div class="track">
+          <div class="fill" style="width:${(pct*100).toFixed(2)}%"></div>
+        </div>`;
+      w.appendChild(row);
+    }
+  }
+}
+
+render();
+// Refresh every 60s to keep time bars current
+setInterval(render, 60000);
+
+// Sync dark mode with Notion's parent page
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'notion-color-scheme') {
+    document.body.classList.toggle('dark', e.data.value === 'dark');
+  }
+});
+</script>
+</body>
+</html>
