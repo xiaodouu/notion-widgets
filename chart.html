@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chart Widget</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --bg2: #f7f6f3; --text: #37352f; --text-dim: #9b9a97;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  body.dark { --bg: #191919; --bg2: #252525; --text: #e6e6e4; --text-dim: #6b6b69; }
+  body {
+    font-family: var(--font); background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 16px;
+  }
+  .chart-title {
+    font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 12px;
+    text-align: center; width: 100%;
+  }
+  canvas { max-width: 100%; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px;
+    justify-content: center; font-size: 11px; color: var(--text-dim);
+  }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div class="chart-title" id="title"></div>
+<canvas id="chart"></canvas>
+<div class="legend" id="legend"></div>
+
+<script>
+const P = new URLSearchParams(location.search);
+
+// Params:
+//   type: bar | donut | line | hbar (default: bar)
+//   title: chart title
+//   labels: comma-separated labels
+//   values: comma-separated numbers
+//   colors: comma-separated hex colors (optional)
+//   dark: true/false
+//   max: max value for axis (auto if not set)
+
+const PALETTES = [
+  '#2eaadc','#e03e3e','#d9730d','#0f7b6c','#6940a5',
+  '#ad1a72','#e8590c','#0b6e4f','#2563eb','#7c3aed',
+  '#db2777','#ea580c','#16a34a','#0891b2','#4f46e5',
+];
+
+const cfg = {
+  type:   P.get('type') || 'bar',
+  title:  P.get('title') || '',
+  labels: (P.get('labels') || '').split(',').map(s => s.trim()).filter(Boolean),
+  values: (P.get('values') || '').split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n)),
+  colors: P.get('colors') ? P.get('colors').split(',').map(s => s.trim()) : null,
+  dark:   P.get('dark') === 'true' || matchMedia('(prefers-color-scheme:dark)').matches,
+  max:    P.get('max') ? parseFloat(P.get('max')) : null,
+};
+
+if (cfg.dark) document.body.classList.add('dark');
+if (cfg.title) document.getElementById('title').textContent = cfg.title;
+else document.getElementById('title').style.display = 'none';
+
+const colors = cfg.colors || PALETTES;
+function getColor(i) { return colors[i % colors.length]; }
+
+const canvas = document.getElementById('chart');
+const ctx = canvas.getContext('2d');
+const dpr = window.devicePixelRatio || 1;
+
+function setSize(w, h) {
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.scale(dpr, dpr);
+}
+
+function buildLegend() {
+  const el = document.getElementById('legend');
+  cfg.labels.forEach((label, i) => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    const dot = document.createElement('span');
+    dot.className = 'legend-dot';
+    dot.style.background = getColor(i);
+    const text = document.createTextNode(`${label}: ${cfg.values[i] ?? ''}`);
+    item.appendChild(dot);
+    item.appendChild(text);
+    el.appendChild(item);
+  });
+}
+
+// ── Bar Chart ──────────────────────────────────────────────────
+function drawBar() {
+  const n = cfg.values.length;
+  if (!n) return;
+  const W = Math.min(500, window.innerWidth - 40);
+  const H = 220;
+  setSize(W, H);
+
+  const pad = { top: 10, right: 16, bottom: 40, left: 44 };
+  const chartW = W - pad.left - pad.right;
+  const chartH = H - pad.top - pad.bottom;
+  const maxVal = cfg.max || Math.max(...cfg.values) * 1.15;
+  const barW = Math.min(40, (chartW / n) * 0.6);
+  const gap = (chartW - barW * n) / (n + 1);
+
+  // Grid lines
+  ctx.strokeStyle = cfg.dark ? '#333' : '#e9e9e7';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-dim');
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + chartH - (chartH * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+    ctx.fillText(Math.round(maxVal * i / 4), pad.left - 6, y + 3);
+  }
+
+  // Bars
+  cfg.values.forEach((v, i) => {
+    const x = pad.left + gap + i * (barW + gap);
+    const barH = (v / maxVal) * chartH;
+    const y = pad.top + chartH - barH;
+
+    // Gradient bar
+    const grad = ctx.createLinearGradient(x, y, x, pad.top + chartH);
+    const c = getColor(i);
+    grad.addColorStop(0, c);
+    grad.addColorStop(1, c + '66');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, barH, [4, 4, 0, 0]);
+    ctx.fill();
+
+    // Value on top
+    ctx.fillStyle = c;
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(v, x + barW / 2, y - 4);
+
+    // Label
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-dim');
+    ctx.font = '10px sans-serif';
+    const label = cfg.labels[i] || '';
+    ctx.fillText(label.length > 6 ? label.slice(0, 5) + '..' : label, x + barW / 2, pad.top + chartH + 14);
+  });
+
+  buildLegend();
+}
+
+// ── Horizontal Bar Chart ───────────────────────────────────────
+function drawHBar() {
+  const n = cfg.values.length;
+  if (!n) return;
+  const W = Math.min(500, window.innerWidth - 40);
+  const barH = 24;
+  const rowGap = 8;
+  const H = n * (barH + rowGap) + 20;
+  setSize(W, H);
+
+  const maxVal = cfg.max || Math.max(...cfg.values) * 1.15;
+  const labelW = 70;
+  const chartW = W - labelW - 50;
+
+  cfg.values.forEach((v, i) => {
+    const y = i * (barH + rowGap) + 10;
+    const bw = (v / maxVal) * chartW;
+
+    // Label
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text');
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'right';
+    const label = cfg.labels[i] || '';
+    ctx.fillText(label.length > 8 ? label.slice(0, 7) + '..' : label, labelW - 6, y + barH / 2 + 4);
+
+    // Track
+    ctx.fillStyle = cfg.dark ? '#333' : '#e9e9e7';
+    ctx.beginPath();
+    ctx.roundRect(labelW, y, chartW, barH, 4);
+    ctx.fill();
+
+    // Bar
+    const grad = ctx.createLinearGradient(labelW, y, labelW + bw, y);
+    const c = getColor(i);
+    grad.addColorStop(0, c + '88');
+    grad.addColorStop(1, c);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(labelW, y, Math.max(bw, 4), barH, 4);
+    ctx.fill();
+
+    // Value
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text');
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(v, labelW + bw + 6, y + barH / 2 + 4);
+  });
+}
+
+// ── Donut Chart ────────────────────────────────────────────────
+function drawDonut() {
+  const n = cfg.values.length;
+  if (!n) return;
+  const size = Math.min(240, window.innerWidth - 60);
+  setSize(size, size);
+
+  const cx = size / 2, cy = size / 2;
+  const R = size / 2 - 8;
+  const innerR = R * 0.58;
+  const total = cfg.values.reduce((a, b) => a + b, 0);
+
+  let startAngle = -Math.PI / 2;
+  cfg.values.forEach((v, i) => {
+    const sweep = (v / total) * Math.PI * 2;
+    const c = getColor(i);
+
+    ctx.beginPath();
+    ctx.moveTo(cx + innerR * Math.cos(startAngle), cy + innerR * Math.sin(startAngle));
+    ctx.arc(cx, cy, R, startAngle, startAngle + sweep);
+    ctx.arc(cx, cy, innerR, startAngle + sweep, startAngle, true);
+    ctx.closePath();
+    ctx.fillStyle = c;
+    ctx.fill();
+
+    // Percentage label on slice
+    const midAngle = startAngle + sweep / 2;
+    const labelR = (R + innerR) / 2;
+    const pct = Math.round(v / total * 100);
+    if (pct >= 5) {
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(pct + '%', cx + labelR * Math.cos(midAngle), cy + labelR * Math.sin(midAngle));
+    }
+
+    startAngle += sweep;
+  });
+
+  // Center text
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text');
+  ctx.font = 'bold 22px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(total, cx, cy - 6);
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-dim');
+  ctx.font = '10px sans-serif';
+  ctx.fillText('Total', cx, cy + 12);
+
+  buildLegend();
+}
+
+// ── Line Chart ─────────────────────────────────────────────────
+function drawLine() {
+  const n = cfg.values.length;
+  if (!n) return;
+  const W = Math.min(500, window.innerWidth - 40);
+  const H = 200;
+  setSize(W, H);
+
+  const pad = { top: 16, right: 16, bottom: 30, left: 44 };
+  const chartW = W - pad.left - pad.right;
+  const chartH = H - pad.top - pad.bottom;
+  const maxVal = cfg.max || Math.max(...cfg.values) * 1.15;
+  const minVal = 0;
+
+  // Grid
+  ctx.strokeStyle = cfg.dark ? '#333' : '#e9e9e7';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-dim');
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + chartH - (chartH * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+    ctx.fillText(Math.round(maxVal * i / 4), pad.left - 6, y + 3);
+  }
+
+  const stepX = chartW / Math.max(1, n - 1);
+  const points = cfg.values.map((v, i) => ({
+    x: pad.left + i * stepX,
+    y: pad.top + chartH - ((v - minVal) / (maxVal - minVal)) * chartH,
+  }));
+
+  // Area fill
+  const c = getColor(0);
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + chartH);
+  grad.addColorStop(0, c + '40');
+  grad.addColorStop(1, c + '05');
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, pad.top + chartH);
+  points.forEach(p => ctx.lineTo(p.x, p.y));
+  ctx.lineTo(points[points.length - 1].x, pad.top + chartH);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1], cur = points[i];
+    const cpx = (prev.x + cur.x) / 2;
+    ctx.bezierCurveTo(cpx, prev.y, cpx, cur.y, cur.x, cur.y);
+  }
+  ctx.strokeStyle = c;
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Dots + values
+  points.forEach((p, i) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = c;
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Value
+    ctx.fillStyle = c;
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(cfg.values[i], p.x, p.y - 8);
+
+    // Label
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-dim');
+    ctx.font = '10px sans-serif';
+    const label = cfg.labels[i] || '';
+    ctx.fillText(label.length > 5 ? label.slice(0, 4) + '..' : label, p.x, pad.top + chartH + 14);
+  });
+}
+
+// ── Render ──────────────────────────────────────────────────────
+switch (cfg.type) {
+  case 'donut': drawDonut(); break;
+  case 'line':  drawLine();  break;
+  case 'hbar':  drawHBar();  break;
+  default:      drawBar();   break;
+}
+
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'notion-color-scheme') {
+    document.body.classList.toggle('dark', e.data.value === 'dark');
+  }
+});
+</script>
+</body>
+</html>
